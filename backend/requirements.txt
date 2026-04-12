@@ -3,4 +3,4 @@ uvicorn
 opencv-python
 numpy
 tensorflow
-mediapipe
+mediapipe==0.10.9
