@@ -1,0 +1,14 @@
+
+dataset/
+backend/dataset/
+
+
+*.h5
+*.pkl
+
+
+__pycache__/
+*.pyc
+
+.env
+.DS_Store

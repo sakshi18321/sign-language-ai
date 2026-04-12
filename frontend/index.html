@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignSense — ASL Sign Language Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a26;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --accent: #7c6ef5;
+    --accent2: #a18fff;
+    --green: #2dd4aa;
+    --red: #ff6b7a;
+    --amber: #f5a623;
+    --text: #f0eeff;
+    --text2: #9490b8;
+    --text3: #5d5a7a;
+    --glow: 0 0 30px rgba(124,110,245,0.25);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .app { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
+
+  /* Header */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,15,0.9);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent) 0%, #4fa8ff 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .logo-text { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.5px; }
+  .logo-sub { font-size: 0.7rem; color: var(--text2); letter-spacing: 2px; text-transform: uppercase; margin-top: -2px; }
+  .nav-tabs { display: flex; gap: 4px; }
+  .tab-btn {
+    padding: 6px 16px; border-radius: 8px; border: none; cursor: pointer;
+    font-family: inherit; font-size: 0.85rem; font-weight: 500;
+    transition: all 0.2s;
+    background: transparent; color: var(--text2);
+  }
+  .tab-btn.active { background: var(--surface2); color: var(--text); border: 1px solid var(--border2); }
+  .tab-btn:hover:not(.active) { color: var(--text); }
+  .status-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 20px;
+    background: var(--surface2); border: 1px solid var(--border);
+    font-size: 0.75rem; color: var(--text2);
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .status-dot.offline { background: var(--red); box-shadow: 0 0 6px var(--red); animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  /* Main */
+  .main { padding: 2rem; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+  /* Detect Section */
+  .detect-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 1.5rem; align-items: start;
+  }
+
+  /* Camera panel */
+  .camera-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; overflow: hidden;
+  }
+  .camera-header {
+    padding: 1rem 1.2rem;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .camera-title { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); }
+  .rec-badge {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 6px;
+    background: rgba(255,107,122,0.15); border: 1px solid rgba(255,107,122,0.3);
+    font-size: 0.7rem; font-weight: 600; color: var(--red); letter-spacing: 1px;
+  }
+  .rec-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); animation: pulse 1s ease-in-out infinite; }
+  .camera-body { position: relative; background: #000; }
+  #videoEl {
+    width: 100%; display: block;
+    max-height: 400px; object-fit: cover;
+    transform: scaleX(-1);
+  }
+  #canvasEl { display: none; }
+  .camera-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px;
+    background: rgba(10,10,15,0.85);
+  }
+  .camera-overlay.hidden { display: none; }
+  .start-btn {
+    padding: 14px 32px; border-radius: 12px;
+    background: var(--accent); border: none; color: white;
+    font-family: inherit; font-size: 1rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    box-shadow: var(--glow);
+  }
+  .start-btn:hover { transform: translateY(-1px); background: var(--accent2); }
+  .camera-controls {
+    padding: 1rem 1.2rem; display: flex; gap: 10px; align-items: center;
+    border-top: 1px solid var(--border);
+  }
+  .ctrl-btn {
+    padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border2);
+    background: transparent; color: var(--text2);
+    font-family: inherit; font-size: 0.85rem; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .ctrl-btn:hover { background: var(--surface2); color: var(--text); }
+  .ctrl-btn.danger:hover { border-color: var(--red); color: var(--red); }
+  .interval-label { font-size: 0.8rem; color: var(--text3); margin-left: auto; }
+
+  /* Prediction panel */
+  .pred-panel { display: flex; flex-direction: column; gap: 1rem; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 1.2rem;
+  }
+  .card-label {
+    font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--text3); margin-bottom: 0.8rem;
+  }
+
+  /* Big letter display */
+  .letter-display { display: flex; align-items: center; gap: 1rem; }
+  .letter-big {
+    font-size: 5rem; font-weight: 700; line-height: 1;
+    color: var(--accent2);
+    text-shadow: 0 0 30px rgba(161,143,255,0.4);
+    min-width: 80px; text-align: center;
+    transition: all 0.2s ease;
+  }
+  .conf-section { flex: 1; }
+  .conf-label { font-size: 0.75rem; color: var(--text3); margin-bottom: 4px; }
+  .conf-value { font-size: 1.5rem; font-weight: 600; color: var(--green); }
+  .conf-bar { margin-top: 8px; height: 4px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+  .conf-fill { height: 100%; border-radius: 4px; transition: width 0.3s ease; background: var(--green); }
+  .no-hand { color: var(--text3); font-size: 0.9rem; font-style: italic; padding: 1rem 0; }
+
+  /* Top 5 chart */
+  .top5 { display: flex; flex-direction: column; gap: 8px; }
+  .top5-row { display: flex; align-items: center; gap: 8px; }
+  .top5-letter {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: var(--surface2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; font-weight: 600; flex-shrink: 0;
+  }
+  .top5-letter.winner { background: rgba(124,110,245,0.2); border-color: var(--accent); color: var(--accent2); }
+  .top5-bar-wrap { flex: 1; height: 20px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+  .top5-bar { height: 100%; border-radius: 4px; transition: width 0.3s ease; background: var(--surface2); }
+  .top5-bar.winner { background: rgba(124,110,245,0.5); }
+  .top5-pct { font-size: 0.75rem; color: var(--text2); min-width: 40px; text-align: right; font-family: 'IBM Plex Mono', monospace; }
+
+  /* Sentence builder */
+  .sentence-box {
+    min-height: 56px; padding: 12px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; display: flex; flex-wrap: wrap; gap: 6px;
+    align-items: center;
+  }
+  .letter-chip {
+    padding: 4px 10px; border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--border2);
+    font-size: 0.9rem; font-weight: 600; color: var(--text);
+    animation: chipIn 0.2s ease;
+  }
+  @keyframes chipIn { from{opacity:0;transform:scale(0.7)} to{opacity:1;transform:scale(1)} }
+  .sentence-ph { color: var(--text3); font-size: 0.85rem; font-style: italic; }
+  .sentence-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .action-btn {
+    padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border2);
+    background: transparent; color: var(--text2);
+    font-family: inherit; font-size: 0.8rem; cursor: pointer; transition: all 0.2s;
+  }
+  .action-btn:hover { background: var(--surface2); color: var(--text); }
+  .action-btn.primary { background: rgba(124,110,245,0.15); border-color: var(--accent); color: var(--accent2); }
+
+  /* TTS Section */
+  .tts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .tts-input-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
+  .tts-input-label { font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; }
+  .tts-textarea {
+    width: 100%; padding: 12px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-family: inherit; font-size: 0.95rem;
+    resize: vertical; min-height: 120px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .tts-textarea:focus { border-color: var(--border2); }
+  .tts-send-btn {
+    margin-top: 12px; padding: 10px 24px; border-radius: 10px;
+    background: var(--accent); border: none; color: white;
+    font-family: inherit; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s; width: 100%;
+  }
+  .tts-send-btn:hover { background: var(--accent2); }
+  .sign-sequence { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
+  .sign-seq-label { font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; }
+  .sign-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+  .sign-card {
+    width: 60px; height: 70px; border-radius: 10px;
+    background: var(--surface2); border: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 4px; cursor: default; transition: all 0.2s;
+  }
+  .sign-card:hover { border-color: var(--border2); transform: translateY(-2px); }
+  .sign-card.active { border-color: var(--accent); background: rgba(124,110,245,0.1); }
+  .sign-card-letter { font-size: 1.5rem; font-weight: 700; color: var(--accent2); }
+  .sign-card-label { font-size: 0.6rem; color: var(--text3); letter-spacing: 0.5px; }
+  .sign-ph { color: var(--text3); font-size: 0.85rem; font-style: italic; }
+  .playback-controls { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+  .play-btn {
+    padding: 8px 20px; border-radius: 8px;
+    background: rgba(45,212,170,0.15); border: 1px solid var(--green);
+    color: var(--green); font-family: inherit; font-size: 0.85rem;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .play-btn:hover { background: rgba(45,212,170,0.25); }
+  .speed-label { font-size: 0.8rem; color: var(--text3); }
+
+  /* Backend info bar */
+  .backend-info {
+    margin-top: 1.5rem; padding: 1rem 1.2rem;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; display: flex; gap: 2rem; flex-wrap: wrap;
+    font-size: 0.8rem; color: var(--text2);
+  }
+  .info-item { display: flex; flex-direction: column; gap: 2px; }
+  .info-val { font-family: 'IBM Plex Mono', monospace; color: var(--text); font-size: 0.85rem; }
+  .info-val.green { color: var(--green); }
+  .info-val.amber { color: var(--amber); }
+
+  /* Mode badge */
+  .mode-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.5px;
+    margin-left: 6px; vertical-align: middle;
+  }
+  .mode-badge.server { background: rgba(45,212,170,0.15); color: var(--green); border: 1px solid rgba(45,212,170,0.3); }
+  .mode-badge.browser { background: rgba(124,110,245,0.15); color: var(--accent2); border: 1px solid rgba(124,110,245,0.3); }
+
+  /* ASL reference */
+  .alphabet-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 1rem; }
+  .alpha-chip {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: var(--surface2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; font-weight: 600; cursor: default; transition: all 0.15s;
+  }
+  .alpha-chip:hover { background: var(--surface); border-color: var(--border2); transform: scale(1.1); }
+
+  /* Settings */
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .setting-label { font-size: 0.85rem; }
+  .setting-sub { font-size: 0.75rem; color: var(--text3); }
+  .toggle { position: relative; width: 40px; height: 22px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; inset: 0; border-radius: 22px;
+    background: var(--surface2); cursor: pointer; transition: 0.2s;
+    border: 1px solid var(--border2);
+  }
+  .toggle-slider:before {
+    content: ''; position: absolute;
+    width: 16px; height: 16px; border-radius: 50%;
+    left: 2px; bottom: 2px; background: var(--text3); transition: 0.2s;
+  }
+  .toggle input:checked + .toggle-slider { background: rgba(124,110,245,0.3); border-color: var(--accent); }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(18px); background: var(--accent2); }
+
+  .spinner { display: inline-block; width: 16px; height: 16px; }
+  .spinner:after {
+    content: ''; display: block; width: 12px; height: 12px;
+    border-radius: 50%; border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: var(--text); animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 768px) {
+    .detect-grid, .tts-grid, .settings-grid { grid-template-columns: 1fr; }
+    .main { padding: 1rem; }
+    .header { padding: 0.8rem 1rem; }
+    .nav-tabs { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">🤟</div>
+      <div>
+        <div class="logo-text">SignSense</div>
+        <div class="logo-sub">ASL Detector</div>
+      </div>
+    </div>
+    <nav class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('detect')">Detect</button>
+      <button class="tab-btn" onclick="switchTab('tts')">Text → Sign</button>
+      <button class="tab-btn" onclick="switchTab('reference')">Reference</button>
+      <button class="tab-btn" onclick="switchTab('settings')">Settings</button>
+    </nav>
+    <div class="status-pill">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Connecting…</span>
+    </div>
+  </header>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- ── DETECT TAB ── -->
+    <section id="tab-detect">
+      <div class="detect-grid">
+
+        <!-- Camera panel -->
+        <div class="camera-panel">
+          <div class="camera-header">
+            <span class="camera-title">Live Camera</span>
+            <div class="rec-badge" id="recBadge" style="display:none">
+              <div class="rec-dot"></div> LIVE
+            </div>
+          </div>
+          <div class="camera-body">
+            <video id="videoEl" autoplay muted playsinline></video>
+            <canvas id="canvasEl"></canvas>
+            <div class="camera-overlay" id="cameraOverlay">
+              <div style="font-size:3rem">📷</div>
+              <div style="font-size:0.9rem;color:var(--text2);margin-bottom:8px">Allow camera access to begin detection</div>
+              <button class="start-btn" onclick="startCamera()">Start Camera</button>
+            </div>
+          </div>
+          <div class="camera-controls">
+            <button class="ctrl-btn" onclick="captureFrame()" id="captureBtn" disabled>Capture</button>
+            <button class="ctrl-btn" onclick="toggleAutoCapture()" id="autoBtn" disabled>Auto</button>
+            <button class="ctrl-btn danger" onclick="stopCamera()" id="stopBtn" style="display:none">Stop</button>
+            <span class="interval-label" id="intervalLabel">Ready</span>
+          </div>
+        </div>
+
+        <!-- Prediction panel -->
+        <div class="pred-panel">
+
+          <div class="card">
+            <div class="card-label">Current Sign</div>
+            <div id="predDisplay">
+              <div class="no-hand">Waiting for detection…</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Confidence Breakdown</div>
+            <div class="top5" id="top5Display">
+              <div class="no-hand">No data yet</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Sign Sentence Builder</div>
+            <div class="sentence-box" id="sentenceBox">
+              <span class="sentence-ph">Press Capture to add letters…</span>
+            </div>
+            <div class="sentence-actions">
+              <button class="action-btn" onclick="addSpace()">+ Space</button>
+              <button class="action-btn" onclick="backspace()">⌫ Delete</button>
+              <button class="action-btn" onclick="clearSentence()">Clear</button>
+              <button class="action-btn primary" onclick="speakSentence()">🔊 Speak</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Backend info bar -->
+      <div class="backend-info" id="backendInfo">
+        <div class="info-item">
+          <span>API Status</span>
+          <span class="info-val" id="apiStatus">Checking…</span>
+        </div>
+        <div class="info-item">
+          <span>Model Accuracy</span>
+          <span class="info-val green" id="modelAcc">—</span>
+        </div>
+        <div class="info-item">
+          <span>Labels</span>
+          <span class="info-val" id="labelCount">—</span>
+        </div>
+        <div class="info-item">
+          <span>Last Inference</span>
+          <span class="info-val" id="lastInf">—</span>
+        </div>
+        <div class="info-item">
+          <span>Inference Mode</span>
+          <span class="info-val" id="inferMode">—</span>
+        </div>
+        <div class="info-item">
+          <span>Backend URL</span>
+          <span class="info-val amber" id="backendUrl">localhost:8000</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── TTS TAB ── -->
+    <section id="tab-tts" style="display:none">
+      <div class="tts-grid">
+        <div class="tts-input-section">
+          <div class="tts-input-label">Enter text to convert to sign language:</div>
+          <textarea class="tts-textarea" id="ttsInput" placeholder="Type something… e.g. HELLO WORLD"></textarea>
+          <button class="tts-send-btn" onclick="convertToSign()">Convert to Signs →</button>
+        </div>
+        <div class="sign-sequence">
+          <div class="sign-seq-label">Sign Sequence</div>
+          <div class="sign-cards" id="signCards">
+            <span class="sign-ph">Enter text and click Convert…</span>
+          </div>
+          <div class="playback-controls" id="playbackControls" style="display:none">
+            <button class="play-btn" onclick="playback()">▶ Play</button>
+            <span class="speed-label">Speed:
+              <select id="speedSelect" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:3px 8px;border-radius:6px;font-family:inherit;font-size:0.8rem">
+                <option value="600">Slow</option>
+                <option value="400" selected>Normal</option>
+                <option value="200">Fast</option>
+              </select>
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── REFERENCE TAB ── -->
+    <section id="tab-reference" style="display:none">
+      <div class="card" style="margin-bottom:1rem">
+        <div class="card-label">ASL Alphabet (A–Z)</div>
+        <p style="font-size:0.85rem;color:var(--text2);margin-bottom:1rem">
+          The American Sign Language (ASL) alphabet uses 26 distinct hand poses, one per letter.
+          Each card below represents a letter the model can detect.
+        </p>
+        <div class="alphabet-grid" id="alphaGrid"></div>
+      </div>
+      <div class="card">
+        <div class="card-label">How it works</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-top:0.5rem">
+          <div style="padding:1rem;background:var(--surface2);border-radius:10px;border:1px solid var(--border)">
+            <div style="font-size:1.5rem;margin-bottom:8px">🎯</div>
+            <div style="font-size:0.85rem;font-weight:600;margin-bottom:4px">Landmark Extraction</div>
+            <div style="font-size:0.8rem;color:var(--text2)">MediaPipe detects 21 hand keypoints (x, y, z). Runs server-side in Python for reliability, with browser-side as a bonus fast path.</div>
+          </div>
+          <div style="padding:1rem;background:var(--surface2);border-radius:10px;border:1px solid var(--border)">
+            <div style="font-size:1.5rem;margin-bottom:8px">🧠</div>
+            <div style="font-size:0.85rem;font-weight:600;margin-bottom:4px">Neural Network</div>
+            <div style="font-size:0.8rem;color:var(--text2)">63 landmark coordinates fed into a 4-layer dense network trained on synthetic+augmented ASL data.</div>
+          </div>
+          <div style="padding:1rem;background:var(--surface2);border-radius:10px;border:1px solid var(--border)">
+            <div style="font-size:1.5rem;margin-bottom:8px">⚡</div>
+            <div style="font-size:0.85rem;font-weight:600;margin-bottom:4px">FastAPI Backend</div>
+            <div style="font-size:0.8rem;color:var(--text2)">Landmarks sent to Python API running TensorFlow. Sub-50ms inference latency locally.</div>
+          </div>
+          <div style="padding:1rem;background:var(--surface2);border-radius:10px;border:1px solid var(--border)">
+            <div style="font-size:1.5rem;margin-bottom:8px">📝</div>
+            <div style="font-size:0.85rem;font-weight:600;margin-bottom:4px">Sentence Builder</div>
+            <div style="font-size:0.8rem;color:var(--text2)">Detected letters accumulate into words. Text-to-speech reads them aloud. Bidirectional: text → sign or sign → text.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SETTINGS TAB ── -->
+    <section id="tab-settings" style="display:none">
+      <div class="settings-grid">
+        <div class="card">
+          <div class="card-label">Detection Settings</div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Auto-capture interval</div>
+              <div class="setting-sub">How often to send frames when Auto is active</div>
+            </div>
+            <select id="captureInterval" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:6px;font-family:inherit">
+              <option value="500">0.5s (fast)</option>
+              <option value="800" selected>0.8s (normal)</option>
+              <option value="1500">1.5s (slow)</option>
+              <option value="3000">3s (deliberate)</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Confidence threshold</div>
+              <div class="setting-sub">Minimum confidence to add to sentence</div>
+            </div>
+            <input type="range" min="0.3" max="0.99" step="0.05" value="0.7" id="confThreshold"
+              style="width:100px" oninput="document.getElementById('confVal').textContent=Math.round(this.value*100)+'%'">
+            <span id="confVal" style="min-width:40px;font-size:0.8rem;color:var(--text2)">70%</span>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Auto-add to sentence</div>
+              <div class="setting-sub">Automatically add detected letters</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="autoAdd">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Prefer browser MediaPipe</div>
+              <div class="setting-sub">Use JS landmarks when available (faster); falls back to server</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="preferBrowser" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-label">Backend Configuration</div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">API Base URL</div>
+              <div class="setting-sub">Your running FastAPI server</div>
+            </div>
+          </div>
+          <input type="text" id="apiUrlInput" value="http://localhost:8000"
+            style="width:100%;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);
+            border-radius:8px;color:var(--text);font-family:inherit;font-size:0.85rem;outline:none;margin-bottom:8px">
+          <button class="ctrl-btn" onclick="testConnection()" style="width:100%">Test Connection</button>
+          <div id="testResult" style="margin-top:8px;font-size:0.8rem;color:var(--text3)"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:1rem">
+        <div class="card-label">Start Backend (run this in your terminal)</div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:8px;overflow-x:auto">
+          <pre style="font-family:'IBM Plex Mono',monospace;font-size:0.8rem;color:var(--green);white-space:pre-wrap">cd sign/backend
+pip install fastapi uvicorn tensorflow mediapipe pillow --break-system-packages
+uvicorn main:app --reload --host 0.0.0.0 --port 8000</pre>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- MediaPipe Hands (CDN) — optional fast path; server is the reliable fallback -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
+<script>
+const API_BASE = () => document.getElementById('apiUrlInput')?.value || 'http://localhost:8000';
+
+// ── State ──────────────────────────────────────────────────────────────────
+let stream       = null;
+let autoTimer    = null;
+let isAutoCap    = false;
+let lastLetter   = '?';
+let lastConf     = 0;
+let sentence     = [];
+let ttsLetters   = [];
+let mpHands      = null;
+let mpReady      = false;   // true only if CDN loaded AND init succeeded
+let pendingResults = null;
+
+// ── Tab routing ──────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  ['detect','tts','reference','settings'].forEach((t, i) => {
+    document.getElementById('tab-' + t).style.display = t === tab ? '' : 'none';
+    document.querySelectorAll('.tab-btn')[i].classList.toggle('active', t === tab);
+  });
+  if (tab === 'reference') buildAlphabetGrid();
+}
+
+// ── Backend health check ──────────────────────────────────────────────────────
+async function checkBackend() {
+  try {
+    const r = await fetch(API_BASE() + '/');
+    const d = await r.json();
+    document.getElementById('statusDot').classList.remove('offline');
+    document.getElementById('statusText').textContent = 'Backend Online';
+    document.getElementById('apiStatus').innerHTML = '<span style="color:var(--green)">✓ Connected</span>';
+    document.getElementById('modelAcc').textContent  = (d.model_accuracy * 100).toFixed(2) + '%';
+    document.getElementById('labelCount').textContent = d.labels?.length + ' classes';
+    return true;
+  } catch {
+    document.getElementById('statusDot').classList.add('offline');
+    document.getElementById('statusText').textContent = 'Backend Offline';
+    document.getElementById('apiStatus').innerHTML = '<span style="color:var(--red)">✗ Disconnected</span>';
+    return false;
+  }
+}
+
+async function testConnection() {
+  const el = document.getElementById('testResult');
+  el.textContent = 'Testing…'; el.style.color = 'var(--text2)';
+  const ok = await checkBackend();
+  el.textContent = ok ? '✓ Connection successful!' : '✗ Could not connect — is the server running?';
+  el.style.color  = ok ? 'var(--green)' : 'var(--red)';
+}
+
+// ── MediaPipe JS (browser) — optional ────────────────────────────────────────
+function setupMediaPipe() {
+  try {
+    if (typeof Hands === 'undefined') {
+      console.warn('MediaPipe Hands CDN not loaded — using server-side fallback');
+      mpReady = false;
+      return;
+    }
+    mpHands = new Hands({
+      locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+    });
+    mpHands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    });
+    mpHands.onResults(r => { pendingResults = r; });
+    mpReady = true;
+    console.log('MediaPipe Hands (browser) ready');
+  } catch(e) {
+    console.warn('MediaPipe Hands setup failed — using server-side fallback:', e.message);
+    mpReady = false;
+  }
+}
+
+// ── Camera ────────────────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480, facingMode: "user" }
+    });
+
+    const video = document.getElementById('videoEl');
+    video.srcObject = stream;
+    await video.play();
+
+    document.getElementById('cameraOverlay').classList.add('hidden');
+    document.getElementById('recBadge').style.display = 'flex';
+    document.getElementById('captureBtn').disabled = false;
+    document.getElementById('autoBtn').disabled = false;
+    document.getElementById('stopBtn').style.display = 'inline-block';
+    document.getElementById('intervalLabel').textContent = 'Camera active';
+
+    console.log("✅ Camera started");
+
+    // 🔥 AUTO START (IMPORTANT)
+    startAutoCapture();
+
+  } catch (e) {
+    alert('Camera access denied: ' + e.message);
+  }
+}
+function stopCamera() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; isAutoCap = false; }
+  document.getElementById('cameraOverlay').classList.remove('hidden');
+  document.getElementById('recBadge').style.display = 'none';
+  document.getElementById('captureBtn').disabled = true;
+  document.getElementById('autoBtn').disabled    = true;
+  document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('autoBtn').textContent = 'Auto';
+  document.getElementById('intervalLabel').textContent = 'Ready';
+}
+
+function toggleAutoCapture() {
+  if (isAutoCap) {
+    clearInterval(autoTimer);
+    autoTimer = null;
+    isAutoCap = false;
+    document.getElementById('autoBtn').textContent = 'Auto';
+    document.getElementById('intervalLabel').textContent = 'Auto stopped';
+  } else {
+    startAutoCapture();
+    document.getElementById('intervalLabel').textContent = 'Auto running...';
+  }
+}
+
+function startAutoCapture() {
+  if (autoTimer) clearInterval(autoTimer);
+
+  isAutoCap = true;
+  document.getElementById('autoBtn').textContent = 'Stop Auto';
+
+  autoTimer = setInterval(() => {
+    console.log("📸 Capturing frame...");
+    captureFrame();
+  }, 800);
+}
+
+// ── Frame capture ─────────────────────────────────────────────────────────────
+async function captureFrame() {
+  const video  = document.getElementById('videoEl');
+  const canvas = document.getElementById('canvasEl');
+  if (!video.srcObject) return;
+
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+  const ctx = canvas.getContext('2d');
+  // Mirror the image to undo the CSS flip on the video element
+  ctx.save();
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, -canvas.width, 0);
+  ctx.restore();
+
+  const preferBrowser = document.getElementById('preferBrowser')?.checked;
+
+  // ── Path A: browser MediaPipe (fast, zero network for landmarks) ──────────
+  if (preferBrowser && mpReady && mpHands) {
+    try {
+      pendingResults = null;
+      await mpHands.send({ image: canvas });
+      await new Promise(r => setTimeout(r, 20));  // let callback fire
+      if (pendingResults?.multiHandLandmarks?.length > 0) {
+        const lm   = pendingResults.multiHandLandmarks[0];
+        const flat = lm.flatMap(p => [p.x, p.y, p.z]);
+        await callPredictLandmarks(flat);
+        return;
+      }
+      // Hand not detected by browser MP — fall through to server
+    } catch(e) {
+      console.warn('Browser MediaPipe error, falling back to server:', e.message);
+    }
+  }
+
+  // ── Path B: send image to server, Python MediaPipe runs there ─────────────
+  const b64 = canvas.toDataURL('image/jpeg', 0.85);
+  await callPredictImage(b64);
+}
+
+// ── API calls ─────────────────────────────────────────────────────────────────
+
+// Used when browser MediaPipe successfully extracted landmarks
+async function callPredictLandmarks(landmarks) {
+  const t0 = performance.now();
+  try {
+    const r = await fetch(API_BASE() + '/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ landmarks }),
+    });
+    const d  = await r.json();
+    const ms = Math.round(performance.now() - t0);
+    document.getElementById('lastInf').textContent  = ms + 'ms';
+    document.getElementById('inferMode').innerHTML  =
+      '<span class="mode-badge browser">Browser MP</span>';
+    updatePredUI(d.letter, d.confidence, d.top5);
+  } catch(e) {
+    showError('Backend unreachable');
+  }
+}
+
+function speak(text) {
+  const msg = new SpeechSynthesisUtterance(text);
+  msg.rate = 1;
+  msg.pitch = 1;
+  speechSynthesis.speak(msg);
+}
+
+
+// Used when browser MediaPipe is unavailable / fails — server does everything
+async function callPredictImage(b64) {
+  const t0 = performance.now();
+  console.log("🚀 Sending frame to backend...");
+  try {
+    const r = await fetch(API_BASE() + '/predict-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: b64 }),
+    });
+
+    if (r.status === 422) {
+      // Backend returned "no hand detected" — not an error, just no hand in frame
+      document.getElementById('predDisplay').innerHTML =
+        '<div class="no-hand">No hand detected in frame</div>';
+      document.getElementById('inferMode').innerHTML =
+        '<span class="mode-badge server">Server MP</span>';
+      return;
+    }
+
+    if (!r.ok) {
+      showError(`Server error ${r.status}`);
+      return;
+    }
+
+    const d  = await r.json();
+    const ms = Math.round(performance.now() - t0);
+    document.getElementById('lastInf').textContent  = ms + 'ms';
+    document.getElementById('inferMode').innerHTML  =
+      '<span class="mode-badge server">Server MP</span>';
+    updatePredUI(d.letter, d.confidence, d.top5);
+  } catch(e) {
+    showError('Backend unreachable — is uvicorn running?');
+  }
+}
+
+function showError(msg) {
+  document.getElementById('predDisplay').innerHTML =
+    `<div class="no-hand" style="color:var(--red)">${msg}</div>`;
+}
+
+// ── Render prediction results ─────────────────────────────────────────────────
+function updatePredUI(letter, conf, top5) {
+  lastLetter = letter;
+  lastConf   = conf;
+  if (!window.lastSpoken) window.lastSpoken = "";
+
+if (letter !== "No Hand" && letter !== window.lastSpoken) {
+  speak(letter);
+  window.lastSpoken = letter;
+}
+  const pct      = Math.round(conf * 100);
+  const barColor = pct > 80 ? 'var(--green)' : pct > 50 ? 'var(--amber)' : 'var(--red)';
+
+  document.getElementById('predDisplay').innerHTML = `
+    <div class="letter-display">
+      <div class="letter-big">${letter}</div>
+      <div class="conf-section">
+        <div class="conf-label">Confidence</div>
+        <div class="conf-value" style="color:${barColor}">${pct}%</div>
+        <div class="conf-bar">
+          <div class="conf-fill" style="width:${pct}%;background:${barColor}"></div>
+        </div>
+      </div>
+    </div>`;
+
+  if (top5 && top5.length) {
+    const maxConf = top5[0].confidence || 0.001;
+    document.getElementById('top5Display').innerHTML = top5.map((t, i) => `
+      <div class="top5-row">
+        <div class="top5-letter${i === 0 ? ' winner' : ''}">${t.letter}</div>
+        <div class="top5-bar-wrap">
+          <div class="top5-bar${i === 0 ? ' winner' : ''}"
+               style="width:${Math.round(t.confidence / maxConf * 100)}%"></div>
+        </div>
+        <div class="top5-pct">${Math.round(t.confidence * 100)}%</div>
+      </div>`).join('');
+  }
+
+  // Auto-add to sentence builder if enabled and confident enough
+  const thresh = parseFloat(document.getElementById('confThreshold')?.value || 0.7);
+  if (document.getElementById('autoAdd')?.checked && conf >= thresh) {
+    addLetterToSentence(letter);
+  }
+}
+
+// ── Sentence builder ──────────────────────────────────────────────────────────
+function addLetterToSentence(letter) {
+  sentence.push(letter);
+  renderSentence();
+}
+
+function renderSentence() {
+  const box = document.getElementById('sentenceBox');
+  if (!sentence.length) {
+    box.innerHTML = '<span class="sentence-ph">Press Capture to add letters…</span>';
+    return;
+  }
+  box.innerHTML = sentence.map(l =>
+    `<div class="letter-chip">${l}</div>`
+  ).join('');
+}
+
+function addSpace() {
+  // "Add Space" button: if we have a detected letter, add it; otherwise add a space marker
+  if (lastLetter !== '?') {
+    addLetterToSentence(lastLetter);
+  } else {
+    sentence.push('_');
+    renderSentence();
+  }
+}
+
+function backspace()     { sentence.pop(); renderSentence(); }
+function clearSentence() { sentence = []; renderSentence(); }
+
+function speakSentence() {
+  const text = sentence.join('').replace(/_/g, ' ');
+  if (!text.trim()) return;
+
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+
+    const u = new SpeechSynthesisUtterance(text);
+
+    const voices = speechSynthesis.getVoices();
+    u.voice = voices.find(v => v.lang.includes("en")) || voices[0];
+
+    u.rate = 0.9;
+    u.pitch = 1;
+
+    speechSynthesis.speak(u);
+  }
+}
+
+// ── Text → Sign ───────────────────────────────────────────────────────────────
+async function convertToSign() {
+  const text = document.getElementById('ttsInput').value.toUpperCase();
+  if (!text.trim()) return;
+  try {
+    const r = await fetch(API_BASE() + '/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const d = await r.json();
+    ttsLetters = d.letters;
+  } catch {
+    // Offline fallback — just split the text locally
+    ttsLetters = text.toUpperCase()
+      .split('')
+      .filter(c => /[A-Z ]/.test(c))
+      .map(c => c === ' ' ? 'SPACE' : c);
+  }
+  renderSignCards(-1);
+  document.getElementById('playbackControls').style.display = ttsLetters.length ? 'flex' : 'none';
+  speak(text);
+}
+
+function renderSignCards(activeIdx) {
+  const el = document.getElementById('signCards');
+
+  if (!ttsLetters.length) {
+    el.innerHTML = '<span class="sign-ph">No signs yet</span>';
+    return;
+  }
+
+  el.innerHTML = ttsLetters.map((l, i) => {
+    if (l === "SPACE") {
+      return `
+        <div class="sign-card${i === activeIdx ? ' active' : ''}">
+          <div class="sign-card-letter">⎵</div>
+          <div class="sign-card-label">SPACE</div>
+        </div>`;
+    }
+
+    return `
+      <div class="sign-card${i === activeIdx ? ' active' : ''}">
+        <img src="signs/${l}.jpg"
+             style="width:45px;height:45px;border-radius:6px;object-fit:cover;" />
+        <div class="sign-card-label">${l}</div>
+      </div>`;
+  }).join('');
+}
+
+async function playback() {
+  const speed = parseInt(document.getElementById('speedSelect').value);
+  for (let i = 0; i < ttsLetters.length; i++) {
+    renderSignCards(i);
+    await new Promise(r => setTimeout(r, speed));
+  }
+  renderSignCards(-1);
+}
+
+// ── Reference alphabet ────────────────────────────────────────────────────────
+function buildAlphabetGrid() {
+  const grid = document.getElementById('alphaGrid');
+  if (grid.children.length) return;
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(l => {
+    const div = document.createElement('div');
+    div.className = 'alpha-chip';
+    div.textContent = l;
+    div.title = 'ASL letter ' + l;
+    grid.appendChild(div);
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  checkBackend();
+  setInterval(checkBackend, 15000);
+  document.getElementById('apiUrlInput').addEventListener('change', () => checkBackend());
+});
+</script>
+</body>
+</html>
