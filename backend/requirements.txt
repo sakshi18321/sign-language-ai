@@ -1,9 +1,9 @@
 fastapi
 uvicorn
-opencv-python-headless==4.8.1.78
-numpy==1.26.4
-tensorflow-cpu==2.15.0
-mediapipe==0.10.9
-scikit-learn==1.4.2
+opencv-python-headless
+numpy
+tensorflow-cpu
+mediapipe==0.10.33
+scikit-learn
 pillow
 python-multipart
