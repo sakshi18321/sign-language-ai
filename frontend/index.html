@@ -487,7 +487,7 @@
           <div style="padding:1rem;background:var(--surface2);border-radius:10px;border:1px solid var(--border)">
             <div style="font-size:1.5rem;margin-bottom:8px">⚡</div>
             <div style="font-size:0.85rem;font-weight:600;margin-bottom:4px">FastAPI Backend</div>
-            <div style="font-size:0.8rem;color:var(--text2)">Landmarks sent to Python API running TensorFlow. Sub-50ms inference latency locally.</div>
+            <div style="font-size:0.8rem;color:var(--text2)">Landmarks sent to Python API running TensorFlow. Sub-50ms inference latency ly.</div>
           </div>
           <div style="padding:1rem;background:var(--surface2);border-radius:10px;border:1px solid var(--border)">
             <div style="font-size:1.5rem;margin-bottom:8px">📝</div>
@@ -565,7 +565,7 @@
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:8px;overflow-x:auto">
           <pre style="font-family:'IBM Plex Mono',monospace;font-size:0.8rem;color:var(--green);white-space:pre-wrap">cd sign/backend
 pip install fastapi uvicorn tensorflow mediapipe pillow --break-system-packages
-uvicorn main:app --reload --host 0.0.0.0 --port 8000</pre>
+uvicorn main:app --reload --host 0.0.0.0 --port https://localhost:8000</pre>
         </div>
       </div>
     </section>
@@ -936,7 +936,7 @@ async function convertToSign() {
     const d = await r.json();
     ttsLetters = d.letters;
   } catch {
-    // Offline fallback — just split the text locally
+    // Offline fallback — just split the text ly
     ttsLetters = text.toUpperCase()
       .split('')
       .filter(c => /[A-Z ]/.test(c))
